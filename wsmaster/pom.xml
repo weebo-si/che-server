@@ -28,6 +28,8 @@
         <module>che-core-api-auth</module>
         <module>che-core-api-auth-azure-devops</module>
         <module>che-core-api-auth-bitbucket</module>
+        <module>che-core-api-auth-forgejo</module>
+        <module>che-core-api-auth-forgejo-common</module>
         <module>che-core-api-auth-github</module>
         <module>che-core-api-auth-github-common</module>
         <module>che-core-api-auth-gitlab</module>
@@ -44,6 +46,8 @@
         <module>che-core-api-factory-git-ssh</module>
         <module>che-core-api-factory-shared</module>
         <module>che-core-api-factory</module>
+        <module>che-core-api-factory-forgejo</module>
+        <module>che-core-api-factory-forgejo-common</module>
         <module>che-core-api-factory-github</module>
         <module>che-core-api-factory-github-common</module>
         <module>che-core-api-factory-gitlab</module>
