@@ -27,9 +27,14 @@ import org.eclipse.che.api.factory.server.scm.AuthorizingFileContentProvider;
 import org.eclipse.che.api.factory.server.scm.PersonalAccessTokenManager;
 import org.eclipse.che.api.workspace.server.devfile.URLFetcher;
 import org.eclipse.che.commons.lang.concurrent.LoggingUncaughtExceptionHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Forgejo specific authorizing file content provider. */
 class ForgejoAuthorizingFileContentProvider extends AuthorizingFileContentProvider<ForgejoUrl> {
+
+  private static final Logger LOG =
+      LoggerFactory.getLogger(ForgejoAuthorizingFileContentProvider.class);
 
   private final HttpClient httpClient;
 
@@ -63,20 +68,23 @@ class ForgejoAuthorizingFileContentProvider extends AuthorizingFileContentProvid
   /** A repository is public when its metadata can be read anonymously. */
   @Override
   protected boolean isPublicRepository(ForgejoUrl remoteFactoryUrl) {
-    HttpRequest request =
-        HttpRequest.newBuilder(
-                URI.create(
-                    remoteFactoryUrl.getProviderUrl()
-                        + "/api/v1/repos/"
-                        + remoteFactoryUrl.getOwner()
-                        + "/"
-                        + remoteFactoryUrl.getRepository()))
-            .timeout(DEFAULT_HTTP_TIMEOUT)
-            .build();
     try {
+      HttpRequest request =
+          HttpRequest.newBuilder(
+                  URI.create(
+                      remoteFactoryUrl.getProviderUrl()
+                          + "/api/v1/repos/"
+                          + ForgejoUrl.encode(remoteFactoryUrl.getOwner())
+                          + "/"
+                          + ForgejoUrl.encode(remoteFactoryUrl.getRepository())))
+              .timeout(DEFAULT_HTTP_TIMEOUT)
+              .build();
       HttpResponse<InputStream> response =
           httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
       return response.statusCode() == HTTP_OK;
+    } catch (IllegalArgumentException e) {
+      LOG.debug("Invalid Forgejo repository URL {}", remoteFactoryUrl.getProviderUrl(), e);
+      return false;
     } catch (IOException | InterruptedException e) {
       return false;
     }

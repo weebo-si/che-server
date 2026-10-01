@@ -52,6 +52,9 @@ public class ForgejoOAuthAuthenticatorProviderTest {
       {clientIdFile.getPath(), null, TEST_URI},
       {emptyFile.getPath(), emptyFile.getPath(), TEST_URI},
       {clientIdFile.getPath(), emptyFile.getPath(), TEST_URI},
+      // invalid endpoints: no scheme, malformed URI
+      {clientIdFile.getPath(), clientSecretFile.getPath(), "forgejo.example.com"},
+      {clientIdFile.getPath(), clientSecretFile.getPath(), "https://forgejo example.com"},
     };
   }
 

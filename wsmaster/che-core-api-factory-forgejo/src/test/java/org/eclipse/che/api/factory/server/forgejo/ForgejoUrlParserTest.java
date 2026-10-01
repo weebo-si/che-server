@@ -243,6 +243,28 @@ public class ForgejoUrlParserTest {
         SERVER + "/api/v1/repos/owner/repo/raw/devfile.yaml");
   }
 
+  @DataProvider
+  public Object[][] relativePaths() {
+    return new Object[][] {
+      {"./devfile.yaml", "devfile.yaml"},
+      {"dir/../devfile.yaml", "devfile.yaml"},
+      {"dir/./sub/../my file.yaml", "dir/my%20file.yaml"},
+      {"dir//devfile.yaml", "dir/devfile.yaml"},
+      // never above the repository root
+      {"../devfile.yaml", "devfile.yaml"},
+      {"/../../dir/devfile.yaml", "dir/devfile.yaml"},
+    };
+  }
+
+  @Test(dataProvider = "relativePaths")
+  public void shouldNormalizeRawFilePath(String path, String expectedPath) {
+    assertEquals(
+        forgejoUrlParser
+            .parse("https://forgejo.example.com/owner/repo", null)
+            .rawFileLocation(path),
+        SERVER + "/api/v1/repos/owner/repo/raw/" + expectedPath);
+  }
+
   @Test
   public void shouldSupportEndpointWithPath() throws Exception {
     ForgejoUrlParser parser =
@@ -511,6 +533,23 @@ public class ForgejoUrlParserTest {
   public void shouldNotMatchAnythingWhenNotConfigured() throws Exception {
     ForgejoUrlParserSecond parser =
         new ForgejoUrlParserSecond(null, devfileFilenamesProvider, personalAccessTokenManager);
+
+    assertFalse(parser.isValid("https://forgejo.example.com/owner/repo"));
+    assertFalse(parser.isValid("git@forgejo.example.com:owner/repo.git"));
+  }
+
+  @DataProvider
+  public Object[][] invalidEndpoints() {
+    return new Object[][] {
+      {"forgejo.example.com"}, // no scheme
+      {"https://forgejo example.com"}, // invalid URI
+    };
+  }
+
+  @Test(dataProvider = "invalidEndpoints")
+  public void shouldIgnoreInvalidEndpoint(String endpoint) throws Exception {
+    ForgejoUrlParser parser =
+        new ForgejoUrlParser(endpoint, devfileFilenamesProvider, personalAccessTokenManager);
 
     assertFalse(parser.isValid("https://forgejo.example.com/owner/repo"));
     assertFalse(parser.isValid("git@forgejo.example.com:owner/repo.git"));

@@ -14,6 +14,7 @@ package org.eclipse.che.security.oauth;
 import static com.google.common.base.Strings.isNullOrEmpty;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import javax.inject.Provider;
@@ -52,7 +53,7 @@ public class AbstractForgejoOAuthAuthenticatorProvider implements Provider<OAuth
       throws IOException {
     if (!isNullOrEmpty(clientIdPath)
         && !isNullOrEmpty(clientSecretPath)
-        && !isNullOrEmpty(forgejoEndpoint)) {
+        && isValidEndpoint(forgejoEndpoint)) {
       String clientId = Files.readString(Path.of(clientIdPath)).trim();
       String clientSecret = Files.readString(Path.of(clientSecretPath)).trim();
       if (!isNullOrEmpty(clientId) && !isNullOrEmpty(clientSecret)) {
@@ -61,6 +62,28 @@ public class AbstractForgejoOAuthAuthenticatorProvider implements Provider<OAuth
       }
     }
     return new NoopOAuthAuthenticator();
+  }
+
+  /** An absolute URL with a host, e.g. {@code https://forgejo.example.com}. */
+  private boolean isValidEndpoint(String forgejoEndpoint) {
+    if (isNullOrEmpty(forgejoEndpoint)) {
+      return false;
+    }
+    try {
+      URI uri = URI.create(forgejoEndpoint);
+      if (uri.getScheme() != null && uri.getHost() != null) {
+        return true;
+      }
+    } catch (IllegalArgumentException e) {
+      // logged below
+    }
+    LOG.warn(
+        "Invalid {} Forgejo endpoint '{}': an absolute URL like https://forgejo.example.com is"
+            + " expected. The {} OAuth authenticator is not configured.",
+        providerName,
+        forgejoEndpoint,
+        providerName);
+    return false;
   }
 
   static class NoopOAuthAuthenticator extends OAuthAuthenticator {

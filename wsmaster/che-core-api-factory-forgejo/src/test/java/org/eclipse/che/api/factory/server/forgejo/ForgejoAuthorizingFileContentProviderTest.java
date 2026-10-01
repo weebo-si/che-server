@@ -22,6 +22,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.testng.Assert.assertFalse;
+import static org.testng.Assert.assertTrue;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -130,5 +132,30 @@ public class ForgejoAuthorizingFileContentProviderTest {
     new ForgejoAuthorizingFileContentProvider(
             forgejoUrl(wireMockServer.baseUrl()), urlFetcher, personalAccessTokenManager)
         .fetchContent("devfile.yaml");
+  }
+
+  @Test
+  public void shouldEncodeOwnerAndRepositoryWhenCheckingVisibility() {
+    stubFor(
+        get(urlEqualTo("/api/v1/repos/my%20owner/my%23repo"))
+            .willReturn(aResponse().withStatus(HTTP_OK)));
+
+    assertTrue(
+        new ForgejoAuthorizingFileContentProvider(
+                forgejoUrl(wireMockServer.baseUrl()), urlFetcher, personalAccessTokenManager)
+            .isPublicRepository(
+                forgejoUrl(wireMockServer.baseUrl())
+                    .withOwner("my owner")
+                    .withRepository("my#repo")));
+  }
+
+  @Test
+  public void shouldNotBePublicWhenRepositoryUrlIsInvalid() {
+    ForgejoUrl forgejoUrl = forgejoUrl("https://forgejo example.com");
+
+    assertFalse(
+        new ForgejoAuthorizingFileContentProvider(
+                forgejoUrl, urlFetcher, personalAccessTokenManager)
+            .isPublicRepository(forgejoUrl));
   }
 }

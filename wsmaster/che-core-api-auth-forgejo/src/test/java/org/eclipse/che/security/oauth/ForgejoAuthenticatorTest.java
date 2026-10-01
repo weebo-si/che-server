@@ -19,6 +19,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static java.lang.Long.MAX_VALUE;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertTrue;
 
@@ -163,6 +164,61 @@ public class ForgejoAuthenticatorTest {
     assertTrue(url.contains("client_id=id"), url);
     assertTrue(url.contains("redirect_uri=https://che.api.com/oauth/callback"), url);
     assertTrue(url.contains("scope=read:user%20write:repository"), url);
+  }
+
+  @Test
+  public void shouldRequestDefaultScopesWhenNoneGiven() throws Exception {
+    String url =
+        authenticator.getAuthenticateUrl(
+            new URL("https://che.api.com/oauth/authenticate"), List.of());
+
+    assertTrue(url.contains("scope=read:user%20write:repository"), url);
+  }
+
+  @Test
+  public void shouldInvalidateStoredToken() throws Exception {
+    assertTrue(authenticator.invalidateToken("token"));
+
+    // the stored credential is dropped: no Forgejo call is needed to reject the user
+    assertNull(authenticator.getOrRefreshToken("userId"));
+    assertFalse(authenticator.invalidateToken("token"));
+  }
+
+  @Test
+  public void shouldNotInvalidateUnknownToken() throws Exception {
+    assertFalse(authenticator.invalidateToken("other-token"));
+    assertFalse(authenticator.invalidateToken(""));
+  }
+
+  @Test
+  public void shouldReadForgejoUser() throws Exception {
+    stubFor(
+        get(urlEqualTo("/api/v1/user"))
+            .willReturn(
+                aResponse()
+                    .withBody(
+                        "{\"id\": 1, \"login\": \"jdoe\", \"full_name\": \"John Doe\", \"email\": \"jdoe@example.com\"}")));
+
+    ForgejoUser user =
+        authenticator.getJson(wireMockServer.url("/api/v1/user"), "token", ForgejoUser.class);
+
+    assertEquals(user.getId(), "1");
+    assertEquals(user.getLogin(), "jdoe");
+    assertEquals(user.getName(), "John Doe");
+    assertEquals(user.getEmail(), "jdoe@example.com");
+  }
+
+  @Test
+  public void shouldUseLoginAsNameWhenFullNameIsEmpty() throws Exception {
+    stubFor(
+        get(urlEqualTo("/api/v1/user"))
+            .willReturn(
+                aResponse().withBody("{\"id\": 1, \"login\": \"jdoe\", \"full_name\": \"\"}")));
+
+    ForgejoUser user =
+        authenticator.getJson(wireMockServer.url("/api/v1/user"), "token", ForgejoUser.class);
+
+    assertEquals(user.getName(), "jdoe");
   }
 
   @Test

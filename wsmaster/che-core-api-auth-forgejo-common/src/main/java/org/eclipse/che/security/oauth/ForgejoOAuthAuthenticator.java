@@ -14,6 +14,8 @@ package org.eclipse.che.security.oauth;
 import static com.google.common.base.Strings.isNullOrEmpty;
 import static org.eclipse.che.commons.lang.StringUtils.trimEnd;
 
+import com.google.api.client.auth.oauth2.StoredCredential;
+import com.google.api.client.util.store.DataStore;
 import com.google.api.client.util.store.MemoryDataStoreFactory;
 import java.io.IOException;
 import java.io.InputStream;
@@ -22,22 +24,29 @@ import java.net.URL;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
 import java.util.List;
 import javax.inject.Singleton;
 import org.eclipse.che.api.auth.shared.dto.OAuthToken;
 import org.eclipse.che.commons.json.JsonHelper;
+import org.eclipse.che.commons.json.JsonNameConventions;
 import org.eclipse.che.commons.json.JsonParseException;
 
 /**
  * OAuth2 authenticator for Forgejo account.
  *
  * <p>Forgejo exposes the standard authorization code flow with refresh tokens. It has no token
- * revocation endpoint, so {@link #invalidateToken(String)} is not supported.
+ * revocation endpoint, so {@link #invalidateToken(String)} only forgets the token on the Che side.
  */
 @Singleton
 public class ForgejoOAuthAuthenticator extends OAuthAuthenticator {
 
-  /** Scopes requested to Forgejo: read the user, clone and push repositories. */
+  /**
+   * Scopes requested to Forgejo: read the user, clone and push repositories. Requested when the
+   * caller does not ask for any scope. Keep in sync with {@code
+   * AbstractForgejoOAuthTokenFetcher.DEFAULT_TOKEN_SCOPES} of the factory module, which has no
+   * dependency on this module.
+   */
   public static final List<String> DEFAULT_SCOPES = List.of("read:user", "write:repository");
 
   private final String forgejoUserEndpoint;
@@ -71,6 +80,17 @@ public class ForgejoOAuthAuthenticator extends OAuthAuthenticator {
     return providerName;
   }
 
+  /**
+   * Builds the authentication URL, requesting {@link #DEFAULT_SCOPES} when no scope is given: the
+   * scopes of the request override the default scopes of the authorization flow, even when empty.
+   */
+  @Override
+  public String getAuthenticateUrl(URL requestUrl, List<String> scopes)
+      throws OAuthAuthenticationException {
+    return super.getAuthenticateUrl(
+        requestUrl, scopes == null || scopes.isEmpty() ? DEFAULT_SCOPES : scopes);
+  }
+
   @Override
   protected String findRedirectUrl(URL requestUrl) {
     return cheApiEndpoint + "/oauth/callback";
@@ -92,7 +112,9 @@ public class ForgejoOAuthAuthenticator extends OAuthAuthenticator {
         throw new OAuthAuthenticationException(
             "Unexpected status code " + response.statusCode() + " from " + getUserUrl);
       }
-      return JsonHelper.fromJson(response.body(), userClass, null);
+      // Forgejo names JSON fields in snake case, e.g. full_name
+      return JsonHelper.fromJson(
+          response.body(), userClass, null, JsonNameConventions.CAMEL_UNDERSCORE);
     } catch (IOException | InterruptedException | JsonParseException e) {
       throw new OAuthAuthenticationException(e.getMessage(), e);
     }
@@ -114,6 +136,33 @@ public class ForgejoOAuthAuthenticator extends OAuthAuthenticator {
       return null;
     }
     return token;
+  }
+
+  /**
+   * Forgets the given token.
+   *
+   * <p>Forgejo has no OAuth token revocation endpoint: the token stays valid on the Forgejo side
+   * until it expires or the user revokes the application in the Forgejo settings. Only the
+   * credential stored by Che is dropped, so that the token is no longer used and the next request
+   * goes through the authorization flow again.
+   *
+   * @return {@code true} if a stored credential held the token, {@code false} otherwise
+   */
+  @Override
+  public boolean invalidateToken(String token) throws IOException {
+    if (!isConfigured() || isNullOrEmpty(token)) {
+      return false;
+    }
+    DataStore<StoredCredential> credentialDataStore = flow.getCredentialDataStore();
+    boolean invalidated = false;
+    for (String userId : new ArrayList<>(credentialDataStore.keySet())) {
+      StoredCredential credential = credentialDataStore.get(userId);
+      if (credential != null && token.equals(credential.getAccessToken())) {
+        credentialDataStore.delete(userId);
+        invalidated = true;
+      }
+    }
+    return invalidated;
   }
 
   @Override

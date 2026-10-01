@@ -104,12 +104,27 @@ public class AbstractForgejoUrlParser {
     this.devfileFilenamesProvider = devfileFilenamesProvider;
     this.personalAccessTokenManager = personalAccessTokenManager;
     this.providerName = providerName;
-    if (isNullOrEmpty(serverUrl)) {
-      this.serverUrl = null;
-      this.serverHost = null;
-    } else {
-      this.serverUrl = trimEnd(serverUrl, '/');
-      this.serverHost = URI.create(this.serverUrl).getHost();
+    String trimmedServerUrl = isNullOrEmpty(serverUrl) ? null : trimEnd(serverUrl, '/');
+    String host = trimmedServerUrl == null ? null : getHost(trimmedServerUrl);
+    if (trimmedServerUrl != null && host == null) {
+      LOG.warn(
+          "Invalid {} Forgejo endpoint '{}': an absolute URL like https://forgejo.example.com is"
+              + " expected. The endpoint is ignored.",
+          providerName,
+          serverUrl);
+    }
+    this.serverUrl = host == null ? null : trimmedServerUrl;
+    this.serverHost = host;
+  }
+
+  /** Host of an absolute URL, {@code null} when the URL is not absolute or is malformed. */
+  @Nullable
+  private static String getHost(String url) {
+    try {
+      URI uri = URI.create(url);
+      return uri.getScheme() == null ? null : uri.getHost();
+    } catch (IllegalArgumentException e) {
+      return null;
     }
   }
 

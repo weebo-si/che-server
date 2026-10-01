@@ -21,12 +21,25 @@ public class ForgejoUserTest {
   public void shouldHoldUserData() {
     ForgejoUser user = new ForgejoUser();
     user.setId("1");
+    user.setLogin("jdoe");
     user.setName("John Doe");
     user.setEmail("jdoe@example.com");
 
     assertEquals(user.getId(), "1");
+    assertEquals(user.getLogin(), "jdoe");
     assertEquals(user.getName(), "John Doe");
+    assertEquals(user.getFullName(), "John Doe");
     assertEquals(user.getEmail(), "jdoe@example.com");
-    assertEquals(user.toString(), "ForgejoUser{id='1', name='John Doe', email='jdoe@example.com'}");
+    assertEquals(
+        user.toString(),
+        "ForgejoUser{id='1', login='jdoe', fullName='John Doe', email='jdoe@example.com'}");
+  }
+
+  @Test
+  public void shouldUseLoginAsNameWithoutFullName() {
+    ForgejoUser user = new ForgejoUser();
+    user.setLogin("jdoe");
+
+    assertEquals(user.getName(), "jdoe");
   }
 }

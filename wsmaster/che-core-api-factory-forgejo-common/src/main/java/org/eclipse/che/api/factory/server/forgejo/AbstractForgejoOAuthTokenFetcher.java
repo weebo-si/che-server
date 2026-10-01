@@ -157,7 +157,11 @@ public class AbstractForgejoOAuthTokenFetcher implements PersonalAccessTokenFetc
       boolean isOAuthToken =
           personalAccessToken.getScmTokenName() != null
               && personalAccessToken.getScmTokenName().startsWith(OAUTH_2_PREFIX);
-      // OAuth tokens: reading the user is the only available check.
+      // OAuth tokens: reading the user is the only available check. The granted scopes are not
+      // checked: the stored OAuth credential keeps no scope, and no reliable Forgejo source of
+      // the granted scopes is known, so a token without write:repository is only detected when
+      // a push fails. See the open question "OAuth2 scope enforcement on the deployed Forgejo
+      // version" of the Forgejo plan (.rfc/forgejo-01/forgejo-plan.md).
       // Personal access tokens: the token must belong to the user it was saved for.
       return Optional.of(
           isOAuthToken || user.getLogin().equals(personalAccessToken.getScmUserName()));

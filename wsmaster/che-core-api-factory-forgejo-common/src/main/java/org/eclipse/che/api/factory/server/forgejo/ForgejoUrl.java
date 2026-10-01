@@ -15,8 +15,10 @@ import static com.google.common.base.Strings.isNullOrEmpty;
 
 import com.google.common.base.Charsets;
 import java.net.URLEncoder;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Deque;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -165,8 +167,25 @@ public class ForgejoUrl extends DefaultFactoryUrl {
         + "/"
         + encode(repository)
         + "/raw/"
-        + encodePath(path)
+        + encodePath(normalizePath(path))
         + (isNullOrEmpty(ref) ? "" : "?ref=" + encode(ref));
+  }
+
+  /**
+   * Resolves the {@code .} and {@code ..} segments of a path relative to the repository root, as
+   * RFC 3986 does for URL paths: a {@code ..} segment above the root is dropped, so that the path
+   * never leaves the repository. Empty segments are dropped as well.
+   */
+  static String normalizePath(String path) {
+    Deque<String> segments = new ArrayDeque<>();
+    for (String segment : path.split("/")) {
+      if (segment.equals("..")) {
+        segments.pollLast();
+      } else if (!segment.isEmpty() && !segment.equals(".")) {
+        segments.addLast(segment);
+      }
+    }
+    return String.join("/", segments);
   }
 
   /** Encodes each segment of a slash separated path, keeping the slashes. */
