@@ -117,6 +117,56 @@ public class ForgejoApiClient {
   }
 
   /**
+   * Checks whether a branch exists: {@code GET /api/v1/repos/{owner}/{repo}/branches/{branch}}.
+   *
+   * @param authenticationToken token to use, anonymous request when {@code null}
+   * @return {@code false} when the server answers that the branch does not exist
+   */
+  public boolean isBranchPresent(
+      String owner, String repository, String branch, @Nullable String authenticationToken)
+      throws ScmCommunicationException, ScmBadRequestException, ScmUnauthorizedException {
+    return isRefPresent(owner, repository, "branches", branch, authenticationToken);
+  }
+
+  /**
+   * Checks whether a tag exists: {@code GET /api/v1/repos/{owner}/{repo}/tags/{tag}}.
+   *
+   * @param authenticationToken token to use, anonymous request when {@code null}
+   * @return {@code false} when the server answers that the tag does not exist
+   */
+  public boolean isTagPresent(
+      String owner, String repository, String tag, @Nullable String authenticationToken)
+      throws ScmCommunicationException, ScmBadRequestException, ScmUnauthorizedException {
+    return isRefPresent(owner, repository, "tags", tag, authenticationToken);
+  }
+
+  private boolean isRefPresent(
+      String owner,
+      String repository,
+      String refType,
+      String ref,
+      @Nullable String authenticationToken)
+      throws ScmCommunicationException, ScmBadRequestException, ScmUnauthorizedException {
+    HttpRequest request =
+        newRequest(
+            "/api/v1/repos/"
+                + ForgejoUrl.encode(owner)
+                + "/"
+                + ForgejoUrl.encode(repository)
+                + "/"
+                + refType
+                + "/"
+                + ForgejoUrl.encodePath(ref),
+            authenticationToken);
+    try {
+      executeRequest(request, inputStream -> readValue(inputStream, JsonNode.class, OBJECT_MAPPER));
+      return true;
+    } catch (ScmItemNotFoundException e) {
+      return false;
+    }
+  }
+
+  /**
    * Checks whether the server is a Forgejo (or Gitea) instance. Calls {@code GET
    * /api/forgejo/v1/version} and falls back to {@code GET /api/v1/version}; both are anonymous.
    */

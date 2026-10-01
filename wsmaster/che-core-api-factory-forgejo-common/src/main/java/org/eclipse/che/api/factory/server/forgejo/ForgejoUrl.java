@@ -160,20 +160,23 @@ public class ForgejoUrl extends DefaultFactoryUrl {
 
   /** API path of the raw content of a file, relative to the server URL. */
   static String rawFilePath(String owner, String repository, String path, @Nullable String ref) {
-    String encodedPath =
-        Arrays.stream(path.replaceAll("^/+", "").split("/"))
-            .map(ForgejoUrl::encode)
-            .collect(Collectors.joining("/"));
     return "/api/v1/repos/"
         + encode(owner)
         + "/"
         + encode(repository)
         + "/raw/"
-        + encodedPath
+        + encodePath(path)
         + (isNullOrEmpty(ref) ? "" : "?ref=" + encode(ref));
   }
 
-  private static String encode(String value) {
+  /** Encodes each segment of a slash separated path, keeping the slashes. */
+  static String encodePath(String path) {
+    return Arrays.stream(path.replaceAll("^/+", "").split("/"))
+        .map(ForgejoUrl::encode)
+        .collect(Collectors.joining("/"));
+  }
+
+  static String encode(String value) {
     return URLEncoder.encode(value, Charsets.UTF_8).replace("+", "%20");
   }
 }

@@ -140,6 +140,18 @@ public class ForgejoOAuthTokenFetcherTest {
     oAuthTokenFetcher.fetchPersonalAccessToken(subject, wireMockServer.url("/"));
   }
 
+  @Test(
+      expectedExceptions = ScmCommunicationException.class,
+      expectedExceptionsMessageRegExp =
+          "Current token doesn't have the necessary privileges.*read:user, write:repository.*")
+  public void shouldThrowCommunicationExceptionWhenTokenLacksScopes() throws Exception {
+    when(oAuthAPI.getOrRefreshToken("forgejo"))
+        .thenReturn(newDto(OAuthToken.class).withToken("noscope"));
+    stubFor(get(urlEqualTo("/api/v1/user")).willReturn(aResponse().withStatus(403)));
+
+    oAuthTokenFetcher.fetchPersonalAccessToken(subject, wireMockServer.url("/"));
+  }
+
   @Test
   public void shouldIgnoreOtherServers() throws Exception {
     assertNull(oAuthTokenFetcher.fetchPersonalAccessToken(subject, "https://other.example.com"));
@@ -213,6 +225,36 @@ public class ForgejoOAuthTokenFetcherTest {
     assertTrue(valid.isPresent());
     assertTrue(valid.get().first);
     assertEquals(valid.get().second, "jdoe");
+  }
+
+  @Test
+  public void shouldInvalidateParamsWhenTokenLacksScopes() throws Exception {
+    stubFor(get(urlEqualTo("/api/v1/user")).willReturn(aResponse().withStatus(403)));
+
+    Optional<Pair<Boolean, String>> valid =
+        oAuthTokenFetcher.isValid(
+            new PersonalAccessTokenParams(
+                wireMockServer.baseUrl(), "forgejo", "forgejo", "id", "pat", null));
+
+    assertEquals(valid, Optional.of(Pair.of(Boolean.FALSE, "")));
+  }
+
+  @Test(expectedExceptions = ScmCommunicationException.class)
+  public void shouldThrowOnParamsValidationServerError() throws Exception {
+    stubFor(get(urlEqualTo("/api/v1/user")).willReturn(aResponse().withStatus(500)));
+
+    oAuthTokenFetcher.isValid(
+        new PersonalAccessTokenParams(
+            wireMockServer.baseUrl(), "forgejo", "forgejo", "id", "pat", null));
+  }
+
+  @Test
+  public void shouldInvalidatePersonalAccessTokenWhenTokenLacksScopes() {
+    stubFor(get(urlEqualTo("/api/v1/user")).willReturn(aResponse().withStatus(403)));
+
+    assertEquals(
+        oAuthTokenFetcher.isValid(personalAccessToken(wireMockServer.baseUrl(), "jdoe", "pat")),
+        Optional.of(Boolean.FALSE));
   }
 
   @Test

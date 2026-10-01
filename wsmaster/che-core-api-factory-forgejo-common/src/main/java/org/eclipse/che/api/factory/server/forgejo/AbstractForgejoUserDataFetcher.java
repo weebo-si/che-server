@@ -14,6 +14,7 @@ package org.eclipse.che.api.factory.server.forgejo;
 import static com.google.common.base.Strings.isNullOrEmpty;
 
 import com.google.common.base.Joiner;
+import java.util.Optional;
 import org.eclipse.che.api.factory.server.scm.AbstractGitUserDataFetcher;
 import org.eclipse.che.api.factory.server.scm.GitUserData;
 import org.eclipse.che.api.factory.server.scm.PersonalAccessToken;
@@ -24,6 +25,8 @@ import org.eclipse.che.api.factory.server.scm.exception.ScmConfigurationPersiste
 import org.eclipse.che.api.factory.server.scm.exception.ScmItemNotFoundException;
 import org.eclipse.che.api.factory.server.scm.exception.ScmUnauthorizedException;
 import org.eclipse.che.commons.annotation.Nullable;
+import org.eclipse.che.commons.env.EnvironmentContext;
+import org.eclipse.che.commons.subject.Subject;
 
 /** Forgejo git user data retriever. */
 public class AbstractForgejoUserDataFetcher extends AbstractGitUserDataFetcher {
@@ -48,13 +51,20 @@ public class AbstractForgejoUserDataFetcher extends AbstractGitUserDataFetcher {
           ScmConfigurationPersistenceException,
           ScmItemNotFoundException,
           ScmBadRequestException {
-    // Forgejo has no default public instance: without a configured server, a token lookup by
-    // server URL would match any provider.
-    if (isNullOrEmpty(oAuthProviderUrl)) {
-      throw new ScmCommunicationException(
-          "Forgejo OAuth 2 is not configured for provider " + providerName);
+    if (!isNullOrEmpty(oAuthProviderUrl)) {
+      return super.fetchGitUserData(namespaceName);
     }
-    return super.fetchGitUserData(namespaceName);
+    // Forgejo has no default public instance: without a configured server, the OAuth token
+    // lookup by server URL would match any provider. Only personal access tokens of this
+    // provider are looked up.
+    Subject cheSubject = EnvironmentContext.getCurrent().getSubject();
+    Optional<PersonalAccessToken> tokenOptional =
+        personalAccessTokenManager.get(cheSubject, providerName, null, namespaceName);
+    if (tokenOptional.isPresent()) {
+      return fetchGitUserDataWithPersonalAccessToken(tokenOptional.get());
+    }
+    throw new ScmCommunicationException(
+        "There are no tokens for the user " + cheSubject.getUserId());
   }
 
   @Override

@@ -20,7 +20,8 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMoc
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 
@@ -99,14 +100,34 @@ public class ForgejoUserDataFetcherTest {
     assertEquals(gitUserData.getScmUserEmail(), "jane@example.com");
   }
 
+  @Test
+  public void shouldFetchGitUserDataWithPersonalAccessTokenWhenNotConfigured() throws Exception {
+    ForgejoUserDataFetcher fetcher =
+        new ForgejoUserDataFetcher(null, "http://che.api", personalAccessTokenManager);
+    when(personalAccessTokenManager.get(any(), eq("forgejo"), isNull(), isNull()))
+        .thenReturn(Optional.of(token("forgejo", "pat")));
+    stubFor(
+        get(urlEqualTo("/api/v1/user"))
+            .withHeader(HttpHeaders.AUTHORIZATION, equalTo("token pat"))
+            .willReturn(aResponse().withBodyFile("forgejo/api/v1/user.json")));
+
+    GitUserData gitUserData = fetcher.fetchGitUserData(null);
+
+    assertEquals(gitUserData.getScmUsername(), "John Doe");
+    assertEquals(gitUserData.getScmUserEmail(), "jdoe@example.com");
+  }
+
   @Test(expectedExceptions = ScmCommunicationException.class)
-  public void shouldNotLookUpTokensWhenNotConfigured() throws Exception {
+  public void shouldNotLookUpOAuthTokensWhenNotConfigured() throws Exception {
     ForgejoUserDataFetcherSecond fetcher =
         new ForgejoUserDataFetcherSecond(null, "http://che.api", personalAccessTokenManager);
+    when(personalAccessTokenManager.get(any(), eq("forgejo_2"), isNull(), isNull()))
+        .thenReturn(Optional.empty());
     try {
       fetcher.fetchGitUserData(null);
     } finally {
-      verifyNoInteractions(personalAccessTokenManager);
+      // the OAuth token lookup by server URL would match the token of any provider
+      verify(personalAccessTokenManager, never()).get(any(), isNull(), any(), any());
     }
   }
 

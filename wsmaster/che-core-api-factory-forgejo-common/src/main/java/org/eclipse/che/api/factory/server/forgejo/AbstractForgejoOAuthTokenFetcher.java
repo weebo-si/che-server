@@ -12,6 +12,7 @@
 package org.eclipse.che.api.factory.server.forgejo;
 
 import static java.lang.String.format;
+import static java.net.HttpURLConnection.HTTP_FORBIDDEN;
 import static org.eclipse.che.commons.lang.StringUtils.trimEnd;
 
 import com.google.common.base.Joiner;
@@ -106,9 +107,12 @@ public class AbstractForgejoOAuthTokenFetcher implements PersonalAccessTokenFetc
           isValid(
               new PersonalAccessTokenParams(
                   scmServerUrl, providerName, tokenName, tokenId, oAuthToken.getToken(), null));
-      // isValid(params) only returns valid tokens: an empty result means the token is rejected
       if (valid.isEmpty()) {
         throw buildScmUnauthorizedException(cheSubject);
+      } else if (!valid.get().first) {
+        throw new ScmCommunicationException(
+            "Current token doesn't have the necessary privileges. Please make sure Che app scopes are correct and containing at least: "
+                + DEFAULT_TOKEN_SCOPES);
       }
       return new PersonalAccessToken(
           scmServerUrl,
@@ -179,6 +183,12 @@ public class AbstractForgejoOAuthTokenFetcher implements PersonalAccessTokenFetc
       return Optional.of(Pair.of(Boolean.TRUE, user.getLogin()));
     } catch (ScmItemNotFoundException | ScmBadRequestException | ScmUnauthorizedException e) {
       return Optional.empty();
+    } catch (ScmCommunicationException e) {
+      // Forgejo answers 403 when the token lacks the read:user scope
+      if (e.getStatusCode() == HTTP_FORBIDDEN) {
+        return Optional.of(Pair.of(Boolean.FALSE, ""));
+      }
+      throw e;
     }
   }
 

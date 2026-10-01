@@ -14,7 +14,9 @@ package org.eclipse.che.api.factory.server.forgejo;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
@@ -22,6 +24,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
@@ -29,8 +34,10 @@ import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertTrue;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.common.Slf4jNotifier;
+import com.github.tomakehurst.wiremock.http.Fault;
 import java.util.List;
 import java.util.Optional;
 import org.eclipse.che.api.factory.server.scm.PersonalAccessToken;
@@ -101,13 +108,6 @@ public class ForgejoUrlParserTest {
         "owner",
         "repo",
         "main",
-        SERVER + "/owner/repo.git"
-      },
-      {
-        "https://forgejo.example.com/owner/repo/src/branch/feature/new-ui",
-        "owner",
-        "repo",
-        "feature/new-ui",
         SERVER + "/owner/repo.git"
       },
       {
@@ -224,15 +224,18 @@ public class ForgejoUrlParserTest {
 
   @Test
   public void shouldBuildRawFileLocations() {
-    ForgejoUrl forgejoUrl =
-        forgejoUrlParser.parse("https://forgejo.example.com/owner/repo/src/branch/feature/x", null);
+    // the branch lookups of the WireMock server answer 404: feature/x is the branch
+    String server = wireMockServer.baseUrl();
+    ForgejoUrlParser parser =
+        new ForgejoUrlParser(server, devfileFilenamesProvider, personalAccessTokenManager);
+    ForgejoUrl forgejoUrl = parser.parse(server + "/owner/repo/src/branch/feature/x", null);
 
     assertEquals(
         forgejoUrl.devfileFileLocations().get(0).location(),
-        SERVER + "/api/v1/repos/owner/repo/raw/devfile.yaml?ref=feature%2Fx");
+        server + "/api/v1/repos/owner/repo/raw/devfile.yaml?ref=feature%2Fx");
     assertEquals(
         forgejoUrl.rawFileLocation("dir/my file.yaml"),
-        SERVER + "/api/v1/repos/owner/repo/raw/dir/my%20file.yaml?ref=feature%2Fx");
+        server + "/api/v1/repos/owner/repo/raw/dir/my%20file.yaml?ref=feature%2Fx");
     assertEquals(
         forgejoUrlParser
             .parse("https://forgejo.example.com/owner/repo", null)
@@ -273,7 +276,8 @@ public class ForgejoUrlParserTest {
 
   @Test
   public void shouldNotProbeUnknownHostWithoutToken() throws Exception {
-    when(personalAccessTokenManager.get(any(), isNull(), eq(wireMockServer.baseUrl()), isNull()))
+    when(personalAccessTokenManager.getStored(
+            any(), isNull(), eq(wireMockServer.baseUrl()), isNull()))
         .thenReturn(Optional.empty());
 
     assertFalse(forgejoUrlParser.isValid(wireMockServer.url("/owner/repo")));
@@ -282,7 +286,8 @@ public class ForgejoUrlParserTest {
 
   @Test
   public void shouldAcceptUnknownForgejoHostWithToken() throws Exception {
-    when(personalAccessTokenManager.get(any(), isNull(), eq(wireMockServer.baseUrl()), isNull()))
+    when(personalAccessTokenManager.getStored(
+            any(), isNull(), eq(wireMockServer.baseUrl()), isNull()))
         .thenReturn(Optional.of(forgejoPersonalAccessToken(wireMockServer.baseUrl())));
     stubFor(
         get(urlEqualTo("/api/forgejo/v1/version"))
@@ -299,7 +304,8 @@ public class ForgejoUrlParserTest {
 
   @Test
   public void shouldAcceptUnknownGiteaHostWithToken() throws Exception {
-    when(personalAccessTokenManager.get(any(), isNull(), eq(wireMockServer.baseUrl()), isNull()))
+    when(personalAccessTokenManager.getStored(
+            any(), isNull(), eq(wireMockServer.baseUrl()), isNull()))
         .thenReturn(Optional.of(forgejoPersonalAccessToken(wireMockServer.baseUrl())));
     stubFor(get(urlEqualTo("/api/forgejo/v1/version")).willReturn(aResponse().withStatus(404)));
     stubFor(
@@ -311,7 +317,8 @@ public class ForgejoUrlParserTest {
 
   @Test
   public void shouldNotAcceptUnknownHostWhenNotForgejo() throws Exception {
-    when(personalAccessTokenManager.get(any(), isNull(), eq(wireMockServer.baseUrl()), isNull()))
+    when(personalAccessTokenManager.getStored(
+            any(), isNull(), eq(wireMockServer.baseUrl()), isNull()))
         .thenReturn(Optional.of(forgejoPersonalAccessToken(wireMockServer.baseUrl())));
     stubFor(get(anyUrl()).willReturn(aResponse().withStatus(404)));
 
@@ -320,11 +327,184 @@ public class ForgejoUrlParserTest {
 
   @Test
   public void shouldNotAcceptUnknownHostWithTokenOfAnotherProvider() throws Exception {
-    when(personalAccessTokenManager.get(any(), isNull(), eq(wireMockServer.baseUrl()), isNull()))
+    when(personalAccessTokenManager.getStored(
+            any(), isNull(), eq(wireMockServer.baseUrl()), isNull()))
         .thenReturn(Optional.of(personalAccessToken(wireMockServer.baseUrl(), "gitlab")));
 
     assertFalse(forgejoUrlParser.isValid(wireMockServer.url("/owner/repo")));
     wireMockServer.verify(0, anyRequestedFor(anyUrl()));
+  }
+
+  @Test
+  public void shouldAcceptUnknownHostWithTokenStoredByForgejoProvider() throws Exception {
+    // a token created through the dashboard or the OAuth flow, named after its provider or not
+    when(personalAccessTokenManager.getStored(
+            any(), isNull(), eq(wireMockServer.baseUrl()), isNull()))
+        .thenReturn(
+            Optional.of(
+                new PersonalAccessToken(
+                    wireMockServer.baseUrl(),
+                    "forgejo",
+                    "che-user",
+                    null,
+                    null,
+                    "oauth2-token",
+                    "id",
+                    "token",
+                    null,
+                    0)));
+    stubFor(
+        get(urlEqualTo("/api/forgejo/v1/version"))
+            .willReturn(aResponse().withBody("{\"version\": \"11.0.0+gitea-1.22.0\"}")));
+
+    assertTrue(forgejoUrlParser.isValid(wireMockServer.url("/owner/repo")));
+  }
+
+  @Test
+  public void shouldNotValidateTokenOfAnotherProvider() throws Exception {
+    // the Forgejo resolvers come first: a GitHub URL must not get its GitHub token validated,
+    // refreshed or removed by them
+    when(personalAccessTokenManager.getStored(any(), isNull(), eq("https://github.com"), isNull()))
+        .thenReturn(Optional.of(personalAccessToken("https://github.com", "github")));
+
+    assertFalse(forgejoUrlParser.isValid("https://github.com/owner/repo"));
+
+    verify(personalAccessTokenManager)
+        .getStored(any(), isNull(), eq("https://github.com"), isNull());
+    verifyNoMoreInteractions(personalAccessTokenManager);
+  }
+
+  @DataProvider
+  public Object[][] refUrls() {
+    return new Object[][] {
+      // path after /src/, existing branches, existing tags, expected ref, expected API calls
+      {"branch/feat/x", List.of("feat/x"), List.of(), "feat/x", List.of("branches/feat")},
+      {"branch/main/devfile.yaml", List.of("main"), List.of(), "main", List.of("branches/main")},
+      {
+        "branch/feat/x/dir/devfile.yaml",
+        List.of("feat/x"),
+        List.of(),
+        "feat/x",
+        List.of("branches/feat", "branches/feat/x")
+      },
+      {"tag/v1/devfile.yaml", List.of("v1"), List.of("v1"), "v1", List.of("tags/v1")},
+      {
+        "tag/release/1.0", List.of(), List.of("release/1.0"), "release/1.0", List.of("tags/release")
+      },
+      {"branch/main", List.of("main"), List.of(), "main", List.of()},
+      {"branch/main/", List.of("main"), List.of(), "main", List.of()},
+      {
+        // not found: the whole path is the branch, as before
+        "branch/a/b/c", List.of(), List.of(), "a/b/c", List.of("branches/a", "branches/a/b")
+      },
+      {
+        // at most 5 candidates are requested
+        "branch/a/b/c/d/e/f/g",
+        List.of(),
+        List.of(),
+        "a/b/c/d/e/f/g",
+        List.of(
+            "branches/a",
+            "branches/a/b",
+            "branches/a/b/c",
+            "branches/a/b/c/d",
+            "branches/a/b/c/d/e")
+      },
+      {
+        "branch/fix%23123/devfile.yaml",
+        List.of("fix#123"),
+        List.of(),
+        "fix#123",
+        List.of("branches/fix%23123")
+      },
+    };
+  }
+
+  @Test(dataProvider = "refUrls")
+  public void shouldResolveBranchOrTag(
+      String path,
+      List<String> branches,
+      List<String> tags,
+      String expectedRef,
+      List<String> expectedCalls) {
+    String server = wireMockServer.baseUrl();
+    ForgejoUrlParser parser =
+        new ForgejoUrlParser(server, devfileFilenamesProvider, personalAccessTokenManager);
+    stubFor(get(anyUrl()).willReturn(aResponse().withStatus(404)));
+    for (String branch : branches) {
+      stubFor(
+          get(urlEqualTo("/api/v1/repos/owner/repo/branches/" + ForgejoUrl.encodePath(branch)))
+              .willReturn(aResponse().withBody("{\"name\": \"" + branch + "\"}")));
+    }
+    for (String tag : tags) {
+      stubFor(
+          get(urlEqualTo("/api/v1/repos/owner/repo/tags/" + ForgejoUrl.encodePath(tag)))
+              .willReturn(aResponse().withBody("{\"name\": \"" + tag + "\"}")));
+    }
+
+    ForgejoUrl forgejoUrl = parser.parse(server + "/owner/repo/src/" + path, null);
+
+    assertEquals(forgejoUrl.getBranch(), expectedRef);
+    wireMockServer.verify(expectedCalls.size(), anyRequestedFor(anyUrl()));
+    for (String call : expectedCalls) {
+      wireMockServer.verify(getRequestedFor(urlEqualTo("/api/v1/repos/owner/repo/" + call)));
+    }
+  }
+
+  @Test
+  public void shouldResolveBranchWithUserToken() throws Exception {
+    String server = wireMockServer.baseUrl();
+    ForgejoUrlParser parser =
+        new ForgejoUrlParser(server, devfileFilenamesProvider, personalAccessTokenManager);
+    when(personalAccessTokenManager.get(any(), isNull(), eq(server), isNull()))
+        .thenReturn(Optional.of(forgejoPersonalAccessToken(server)));
+    stubFor(
+        get(urlEqualTo("/api/v1/repos/owner/repo/branches/main"))
+            .withHeader("Authorization", equalTo("token token"))
+            .willReturn(aResponse().withBody("{\"name\": \"main\"}")));
+
+    assertEquals(
+        parser.parse(server + "/owner/repo/src/branch/main/devfile.yaml", null).getBranch(),
+        "main");
+  }
+
+  @DataProvider
+  public Object[][] apiFailures() {
+    return new Object[][] {
+      {aResponse().withStatus(500)},
+      {aResponse().withStatus(401)},
+      {aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)},
+    };
+  }
+
+  @Test(dataProvider = "apiFailures")
+  public void shouldKeepWholePathAsBranchWhenApiFails(ResponseDefinitionBuilder response) {
+    String server = wireMockServer.baseUrl();
+    ForgejoUrlParser parser =
+        new ForgejoUrlParser(server, devfileFilenamesProvider, personalAccessTokenManager);
+    stubFor(get(anyUrl()).willReturn(response));
+
+    assertEquals(
+        parser.parse(server + "/owner/repo/src/branch/main/dir/devfile.yaml", null).getBranch(),
+        "main/dir/devfile.yaml");
+    // no further candidate is requested once the API fails
+    wireMockServer.verify(getRequestedFor(urlEqualTo("/api/v1/repos/owner/repo/branches/main")));
+    wireMockServer.verify(
+        0, getRequestedFor(urlEqualTo("/api/v1/repos/owner/repo/branches/main/dir")));
+  }
+
+  @Test
+  public void shouldNotResolveSingleSegmentRef() {
+    String server = wireMockServer.baseUrl();
+    ForgejoUrlParser parser =
+        new ForgejoUrlParser(server, devfileFilenamesProvider, personalAccessTokenManager);
+
+    assertEquals(parser.parse(server + "/owner/repo/src/tag/v1.0.0", null).getBranch(), "v1.0.0");
+    assertEquals(
+        parser.parse(server + "/owner/repo/src/commit/0a1b2c3d/docs/README.md", null).getBranch(),
+        "0a1b2c3d");
+    wireMockServer.verify(0, anyRequestedFor(anyUrl()));
+    verifyNoInteractions(personalAccessTokenManager);
   }
 
   @Test
@@ -368,7 +548,8 @@ public class ForgejoUrlParserTest {
 
   @Test
   public void shouldNotAcceptUnknownHostWhenTokensCannotBeRead() throws Exception {
-    when(personalAccessTokenManager.get(any(), isNull(), eq(wireMockServer.baseUrl()), isNull()))
+    when(personalAccessTokenManager.getStored(
+            any(), isNull(), eq(wireMockServer.baseUrl()), isNull()))
         .thenThrow(
             new ScmConfigurationPersistenceException("cannot read secrets", new Exception()));
 

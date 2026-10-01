@@ -130,13 +130,13 @@ public class ForgejoFactoryParametersResolverTest {
     FactoryDevfileV2Dto factory =
         (FactoryDevfileV2Dto)
             resolver.createFactory(
-                ImmutableMap.of(URL_PARAMETER_NAME, SERVER + "/owner/repo/src/branch/feature/x"));
+                ImmutableMap.of(URL_PARAMETER_NAME, SERVER + "/owner/repo/src/branch/feature-x"));
 
     assertNotNull(factory.getDevfile());
     ScmInfo scmInfo = factory.getScmInfo();
     assertEquals(scmInfo.getScmProviderName(), "forgejo");
     assertEquals(scmInfo.getRepositoryUrl(), SERVER + "/owner/repo.git");
-    assertEquals(scmInfo.getBranch(), "feature/x");
+    assertEquals(scmInfo.getBranch(), "feature-x");
   }
 
   @Test
