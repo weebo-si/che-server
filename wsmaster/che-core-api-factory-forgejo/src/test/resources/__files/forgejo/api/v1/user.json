@@ -1,0 +1,17 @@
+{
+  "id": 1,
+  "login": "jdoe",
+  "login_name": "",
+  "source_id": 0,
+  "full_name": "John Doe",
+  "email": "jdoe@example.com",
+  "avatar_url": "https://forgejo.example.com/avatars/1",
+  "html_url": "https://forgejo.example.com/jdoe",
+  "language": "en-US",
+  "is_admin": false,
+  "restricted": false,
+  "active": true,
+  "prohibit_login": false,
+  "visibility": "public",
+  "username": "jdoe"
+}

@@ -105,6 +105,10 @@
         </dependency>
         <dependency>
             <groupId>org.eclipse.che.core</groupId>
+            <artifactId>che-core-api-auth-forgejo</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.che.core</groupId>
             <artifactId>che-core-api-auth-github</artifactId>
         </dependency>
         <dependency>
@@ -138,6 +142,10 @@
         <dependency>
             <groupId>org.eclipse.che.core</groupId>
             <artifactId>che-core-api-factory-bitbucket-server</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.che.core</groupId>
+            <artifactId>che-core-api-factory-forgejo</artifactId>
         </dependency>
         <dependency>
             <groupId>org.eclipse.che.core</groupId>
