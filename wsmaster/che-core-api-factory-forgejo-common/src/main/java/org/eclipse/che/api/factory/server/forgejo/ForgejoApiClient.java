@@ -17,8 +17,6 @@ import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED;
 import static java.time.Duration.ofSeconds;
 import static org.eclipse.che.commons.lang.StringUtils.trimEnd;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Charsets;
 import com.google.common.io.CharStreams;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -41,6 +39,10 @@ import org.eclipse.che.commons.annotation.Nullable;
 import org.eclipse.che.commons.lang.concurrent.LoggingUncaughtExceptionHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Forgejo API operations helper. Also compatible with Gitea, which exposes the same {@code /api/v1}
@@ -58,7 +60,8 @@ public class ForgejoApiClient {
   private final String serverUrl;
 
   private static final Duration DEFAULT_HTTP_TIMEOUT = ofSeconds(10);
-  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+  private static final ObjectMapper OBJECT_MAPPER =
+      JsonMapper.builderWithJackson2Defaults().build();
 
   public ForgejoApiClient(String serverUrl) {
     this.serverUrl = trimEnd(serverUrl, '/');
@@ -244,7 +247,7 @@ public class ForgejoApiClient {
                 PROVIDER_NAME);
         }
       }
-    } catch (IOException | InterruptedException | UncheckedIOException e) {
+    } catch (IOException | InterruptedException | UncheckedIOException | JacksonException e) {
       throw new ScmCommunicationException(e.getMessage(), e, PROVIDER_NAME);
     }
   }
