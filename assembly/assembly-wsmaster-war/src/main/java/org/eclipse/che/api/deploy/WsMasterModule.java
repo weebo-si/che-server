@@ -41,6 +41,10 @@ import org.eclipse.che.api.factory.server.bitbucket.BitbucketFactoryParametersRe
 import org.eclipse.che.api.factory.server.bitbucket.BitbucketScmFileResolver;
 import org.eclipse.che.api.factory.server.bitbucket.BitbucketServerAuthorizingFactoryParametersResolver;
 import org.eclipse.che.api.factory.server.bitbucket.BitbucketServerScmFileResolver;
+import org.eclipse.che.api.factory.server.forgejo.ForgejoFactoryParametersResolver;
+import org.eclipse.che.api.factory.server.forgejo.ForgejoFactoryParametersResolverSecond;
+import org.eclipse.che.api.factory.server.forgejo.ForgejoScmFileResolver;
+import org.eclipse.che.api.factory.server.forgejo.ForgejoScmFileResolverSecond;
 import org.eclipse.che.api.factory.server.git.ssh.GitSshFactoryParametersResolver;
 import org.eclipse.che.api.factory.server.git.ssh.GitSshScmFileResolver;
 import org.eclipse.che.api.factory.server.github.GithubFactoryParametersResolver;
@@ -148,6 +152,12 @@ public class WsMasterModule extends AbstractModule {
     // Service-specific factory resolvers.
     Multibinder<FactoryParametersResolver> factoryParametersResolverMultibinder =
         Multibinder.newSetBinder(binder(), FactoryParametersResolver.class);
+    // Forgejo is bound first: on equal priority the first accepting resolver wins, and the GitHub
+    // resolver also accepts Forgejo servers through its Gitea-compatible API detection.
+    factoryParametersResolverMultibinder.addBinding().to(ForgejoFactoryParametersResolver.class);
+    factoryParametersResolverMultibinder
+        .addBinding()
+        .to(ForgejoFactoryParametersResolverSecond.class);
     factoryParametersResolverMultibinder.addBinding().to(GithubFactoryParametersResolver.class);
     factoryParametersResolverMultibinder
         .addBinding()
@@ -170,6 +180,9 @@ public class WsMasterModule extends AbstractModule {
 
     Multibinder<ScmFileResolver> scmFileResolverResolverMultibinder =
         Multibinder.newSetBinder(binder(), ScmFileResolver.class);
+    // Forgejo is bound first, see the factory parameters resolvers above.
+    scmFileResolverResolverMultibinder.addBinding().to(ForgejoScmFileResolver.class);
+    scmFileResolverResolverMultibinder.addBinding().to(ForgejoScmFileResolverSecond.class);
     scmFileResolverResolverMultibinder.addBinding().to(GithubScmFileResolver.class);
     scmFileResolverResolverMultibinder.addBinding().to(GithubScmFileResolverSecond.class);
     scmFileResolverResolverMultibinder.addBinding().to(BitbucketScmFileResolver.class);
@@ -183,6 +196,7 @@ public class WsMasterModule extends AbstractModule {
     install(new org.eclipse.che.security.oauth.KubernetesOAuthModule());
     install(new org.eclipse.che.api.factory.server.bitbucket.BitbucketServerModule());
     install(new org.eclipse.che.api.factory.server.gitlab.GitlabModule());
+    install(new org.eclipse.che.api.factory.server.forgejo.ForgejoModule());
     install(new org.eclipse.che.api.factory.server.github.GithubModule());
     install(new org.eclipse.che.api.factory.server.bitbucket.BitbucketModule());
     install(new org.eclipse.che.api.factory.server.azure.devops.AzureDevOpsModule());
@@ -269,6 +283,7 @@ public class WsMasterModule extends AbstractModule {
     installDefaultSecureServerExposer(infrastructure);
     install(new org.eclipse.che.security.BitbucketModule());
     install(new org.eclipse.che.security.oauth.GitLabModule());
+    install(new org.eclipse.che.security.oauth.ForgejoModule());
     install(new org.eclipse.che.security.oauth.AzureDevOpsModule());
     install(new org.eclipse.che.security.oauth.GithubModule());
     install(new WorkspaceJpaModule());
